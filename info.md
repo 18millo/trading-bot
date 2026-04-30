@@ -1,93 +1,275 @@
-Here is your **clean `info.md` (Day 1 setup) with NO code**, ready to copy directly:
+# MT5 Trading Bot - ENB Strategy System
+
+## 📋 Project Overview
+
+A CLI-based automated trading bot implementing the **ENB Strategy (Engulfing + Market Structure + Liquidity Model)** for MetaTrader 5. Designed for presentation and demonstration on Linux with MT5 running via Wine.
+
+**Key Features:**
+- **Command-line Interface** - No web interface, pure CLI
+- **MT5 Integration** - Connects to MetaTrader 5 via Wine on Linux
+- **ENB Strategy** - Institutional-grade price action trading system
+- **Backtesting** - Historical simulation with PDF reports
+- **Automated Trading** - Run bot continuously with signal detection
+- **PDF Reports** - Detailed performance reports with win rates
+- **JWT Authentication** - Secure CLI access
+- **SQLite Database** - Lightweight, no PostgreSQL required
 
 ---
 
-# INFO.MD — DAY 1 PROJECT SETUP
+## 🏗️ System Architecture
 
-## PROJECT: TRADING BOT SYSTEM
-
-This document outlines the first day of development for the trading bot system. The focus is on setting up the project foundation, database connection, and basic application interface for external access.
-
----
-
-# 1. PROJECT STRUCTURE
-
-The initial project will be organized into a clear and scalable folder structure to support backend, frontend, database handling, and future trading modules.
-
-The system will include separate directories for backend logic, frontend interface, database configuration, data storage, and reports.
-
-This structure is designed to ensure modular development, making it easier to expand the system into backtesting, forward testing, and live trading features.
-
----
-
-# 2. DATABASE SETUP (POSTGRESQL)
-
-A PostgreSQL database will be created to store all trading-related data.
-
-The database will act as the central storage system for:
-
-* Trading strategies
-* Market data
-* Trade logs
-* Backtesting results
-* Forward testing results
-
-A dedicated database user will be created with full permissions to manage the system data securely.
+```
+┌─────────────────────────────────────────────────┐
+│           CLI INTERFACE (trading-bot)          │
+│  - Authentication (JWT tokens)                 │
+│  - Commands: login, trade, run, backtest, etc │
+└────────────────────┬──────────────────────────┘
+                     │
+        ┌────────────┴────────────┐
+        ▼                         ▼
+┌─────────────┐    ┌──────────────────────────┐
+│  DATABASE   │    │    TRADING ENGINE         │
+│  SQLite     │    │  - ENB Strategy Engine   │
+│  - users    │    │  - MT5 Connector (Wine)  │
+│  - trades   │    │  - Trade Execution        │
+└─────────────┘    └──────────────────────────┘
+                     │
+                     ▼
+            ┌─────────────────┐
+            │  MetaTrader 5   │
+            │  (via Wine)     │
+            └─────────────────┘
+```
 
 ---
 
-# 3. DATABASE CONNECTION (BACKEND)
+## 🚀 Installation Guide
 
-The backend system will be connected to the PostgreSQL database using Python.
+### Prerequisites
 
-This connection will allow the application to:
+- Python 3.11+
+- MetaTrader 5 terminal installed via Wine on Linux
+- SQLite (built-in with Python)
 
-* Read and write trading data
-* Store strategy configurations
-* Save trade execution history
-* Manage backtesting results
+### Quick Setup
 
-The database connection layer will be isolated to ensure reusability across all services.
+```bash
+cd /home/millo/Documents/python-projects/trading-bot
 
----
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate
 
-# 4. API SETUP (FASTAPI BACKEND)
+# Install dependencies
+pip install -r requirements.txt
 
-A lightweight backend API will be created using a Python-based web framework.
+# Configure environment
+cp .env.example .env
+# Edit .env with your MT5 credentials
+```
 
-This API will serve as the main communication layer between:
+### MT5 Setup on Linux (Wine)
 
-* Frontend dashboard
-* External users
-* Trading engines
-* Database system
+1. Install Wine if not installed:
+```bash
+sudo apt install wine
+```
 
-The API will initially provide basic endpoints to confirm system status and health checks.
+2. Install MetaTrader 5 via Wine:
+```bash
+wine /path/to/mt5setup.exe
+```
 
-This ensures that the backend is properly running and accessible before adding trading functionality.
-
----
-
-# 5. PUBLIC API ACCESS DESIGN
-
-The system will be designed to allow external access through REST API endpoints.
-
-This means:
-
-* External systems can interact with the trading bot
-* Future integration with dashboards or mobile apps is possible
-* Trading operations can be controlled programmatically
-
-At this stage, only basic connectivity endpoints are active.
+3. Update `.env` with MT5 path:
+```
+MT5_WINE_PATH=/home/millo/.wine/drive_c/Program Files/MetaTrader 5/terminal64.exe
+```
 
 ---
 
-# 6. DAY 1 OBJECTIVES
+## 🧪 Testing the Bot
 
-By the end of Day 1, the following should be completed:
+### 1. Login to the Bot
 
-* Full project folder structure is created
-* PostgreSQL database is installed and configured
-* Database connection is successfully established in backend
-* API server is running successfully
-* External requests can reach the backend system
+```bash
+./trading-bot login --username admin --password admin123
+```
+
+### 2. Check Status
+
+```bash
+./trading-bot status
+```
+
+### 3. Test MT5 Connection
+
+```bash
+./trading-bot mt5 --connect
+./trading-bot mt5 --info EURUSD
+```
+
+### 4. Run Backtest
+
+```bash
+./trading-bot backtest --symbol EURUSD --timeframe M15 --days 30
+```
+
+This generates a PDF report with:
+- Total trades
+- Win rate
+- Profit/loss
+- Strategy performance
+
+### 5. Manual Trade (ENB Strategy)
+
+```bash
+./trading-bot trade --symbol EURUSD --timeframe M15
+```
+
+The bot analyzes the market using ENB strategy and executes a trade if signal detected.
+
+### 6. Run Automated Bot
+
+```bash
+./trading-bot run --symbol EURUSD --timeframe M15 --interval 60 --max-trades 5
+```
+
+This runs the bot continuously, checking for signals every 60 seconds.
+
+Press Ctrl+C to stop.
+
+### 7. Generate PDF Report
+
+```bash
+./trading-bot report --symbol EURUSD --days 30
+```
+
+### 8. Check Positions
+
+```bash
+./trading-bot positions
+./trading-bot positions --close <ticket_number>
+```
+
+---
+
+## 📊 ENB Strategy Configuration
+
+The bot uses a single ENB strategy combining:
+
+1. **Market Structure** - HH/HL for bullish, LH/LL for bearish
+2. **Liquidity Sweep** - Price sweeps previous high/low
+3. **Engulfing Candle** - Strong candle confirmation
+
+```json
+{
+  "name": "ENB Strategy - Market Structure + Liquidity + Engulfing",
+  "structure": {
+    "enabled": true,
+    "method": "SWING",
+    "trend_definition": "HH_HL_LH_LL"
+  },
+  "liquidity": {
+    "enabled": true,
+    "require_sweep": true
+  },
+  "entry": {
+    "require_engulfing": true,
+    "body_engulf_required": true
+  },
+  "risk": {
+    "risk_per_trade": 1,
+    "rr_ratio": 2
+  }
+}
+```
+
+View current config:
+```bash
+./trading-bot strategy --show-config
+```
+
+---
+
+## 📄 PDF Report Features
+
+Every backtest/report generates a PDF with:
+- **Summary Statistics** - Total trades, win rate, profit/loss
+- **Strategy Configuration** - ENB parameters used
+- **Recent Trades Table** - Last 20 trades with entry/exit prices
+- **Win Rate Analysis** - Accurate performance metrics
+- **Timestamp** - When report was generated
+
+---
+
+## 🎯 Commands Reference
+
+| Command | Description |
+|---------|-------------|
+| `login` | Authenticate with username/password |
+| `status` | Check MT5 and database status |
+| `trade` | Execute single trade with ENB strategy |
+| `run` | Run automated trading bot |
+| `backtest` | Run historical backtest with PDF report |
+| `positions` | Show or close open positions |
+| `report` | Generate PDF trading report |
+| `strategy` | View strategy configuration |
+| `mt5` | MT5 connection commands |
+
+---
+
+## ✅ Presentation Checklist
+
+1. **Start the bot** - `./trading-bot status`
+2. **Show MT5 connection** - `./trading-bot mt5 --connect`
+3. **Display strategy config** - `./trading-bot strategy --show-config`
+4. **Run backtest** - `./trading-bot backtest --symbol EURUSD --timeframe M15 --days 30`
+5. **Show PDF report** - Open generated PDF with win rates
+6. **Explain ENB logic** - Structure + Liquidity + Engulfing
+7. **Demo live trading** - `./trading-bot run --symbol EURUSD --timeframe M15`
+8. **Show positions** - `./trading-bot positions`
+
+---
+
+## 🔧 Troubleshooting
+
+### MT5 Connection Failed
+```bash
+# Check if MT5 is running via Wine
+wine "C:\Program Files\MetaTrader 5\terminal64.exe"
+
+# Verify credentials in .env
+MT5_LOGIN=your_login
+MT5_PASSWORD=your_password
+MT5_SERVER=your_server
+```
+
+### Database Errors
+```bash
+# Database is SQLite, stored in trading_bot.db
+# Delete and recreate if needed:
+rm trading_bot.db
+./trading-bot status  # This will recreate the database
+```
+
+### PDF Generation Fails
+```bash
+# Install reportlab
+pip install reportlab
+```
+
+---
+
+## 📞 Support
+
+For issues:
+1. Check MT5 is running via Wine
+2. Verify .env configuration
+3. Check database connection with `./trading-bot status`
+4. Review terminal output for error messages
+
+---
+
+**Last Updated:** April 2026  
+**Version:** 2.0 - CLI MT5 Trading Bot  
+**Author:** Trading Bot Project
