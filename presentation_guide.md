@@ -1,5 +1,5 @@
 # 🎤 MT5 Trading Bot - Presentation Guide
-## ENB Strategy CLI System (Institutional-Grade Trading Bot)
+## ENB Strategy + Support/Resistance (CLI System)
 
 ---
 
@@ -9,10 +9,10 @@
 - [ ] Ensure MT5 is running via Wine: `wine "C:\Program Files\MetaTrader 5\terminal64.exe"`
 - [ ] Verify .env has correct MT5 credentials
 - [ ] Make bot executable: `chmod +x trading-bot`
-- [ ] Test login: `./trading-bot login --username admin --password admin123`
-- [ ] Test MT5 connection: `./trading-bot mt5 --connect`
-- [ ] Check status: `./trading-bot status`
+- [ ] Test user creation: `./trading-bot create-user --username presenter --password demo123`
+- [ ] Test direct access: `./trading-bot status`
 - [ ] Prepare backup terminal in case of issues
+- [ ] Have sample PDF report ready (run backtest before presentation)
 
 ### Materials Needed
 - [ ] This guide accessible on second screen
@@ -27,7 +27,7 @@
 | Section | Time | Content |
 |---------|------|---------|
 | 1. Introduction | 2 mins | Project overview + problem statement |
-| 2. Strategy Explanation | 3 mins | ENB Model (ICT concepts) |
+| 2. Strategy Explanation | 4 mins | ENB + Support/Resistance Model |
 | 3. Live Demo | 10 mins | CLI walkthrough + backtest + PDF report |
 | 4. Q&A | 5 mins | Address questions |
 
@@ -38,7 +38,7 @@
 ### STEP 1: Introduction (2 mins)
 
 **What to say:**
-> "Today I'm presenting an MT5 Trading Bot that implements the ENB Strategy - a price-action model based on institutional ICT concepts. Unlike retail indicator-based bots, this CLI system mimics how smart money trades using market structure, liquidity sweeps, and engulfing candles."
+> "Today I'm presenting an MT5 Trading Bot that implements the ENB Strategy enhanced with Support and Resistance detection. Unlike retail indicator-based bots, this CLI system mimics how smart money trades using market structure, liquidity sweeps, engulfing candles, and key S/R levels from higher timeframes."
 
 **Visual:** Show project architecture from `info.md` (terminal output):
 ```bash
@@ -47,13 +47,15 @@
 
 ---
 
-### STEP 2: Explain ENB Strategy (3 mins)
+### STEP 2: Explain ENB + S/R Strategy (4 mins)
 
 **What to say:**
-> "The ENB Strategy only executes trades when 3 conditions align:
-> 1. **Market Structure** - HH/HL for buys, LH/LL for sells
-> 2. **Liquidity Sweep** - Price takes out previous highs/lows (stop hunt)
-> 3. **Engulfing Candle** - Strong confirmation after liquidity grab
+> "The enhanced ENB strategy executes trades when ALL these conditions align:
+> 1. **Market Structure** (1min) - HH/HL for buys, LH/LL for sells
+> 2. **Liquidity Sweep** (1min) - Price takes out previous highs/lows
+> 3. **Engulfing Candle** (1min) - Strong confirmation after liquidity grab
+> 4. **Support/Resistance** (1H) - Detected from 1-hour candles
+> 5. **Entry Filter** - Only trade when price is near S/R levels
 > 
 > This gives us high-probability setups with 1:2 or 1:3 risk-reward ratios."
 
@@ -62,9 +64,34 @@
 ./trading-bot strategy --show-config
 ```
 
+**Key Points:**
+- 1H timeframe for S/R detection (more reliable levels)
+- 1min timeframe for precise entries
+- Automated clustering of nearby S/R levels
+- Only execute when price is within 5 pips of S/R level
+
 ---
 
-### STEP 3: Live Demo - Check Status (1 min)
+### STEP 3: Live Demo - Create User & Auto-Login (1 min)
+
+**Action:**
+```bash
+./trading-bot create-user --username demo --password demo123
+```
+
+**What to say:**
+> "First, let me create a user account. Notice that after creation, the bot automatically logs me in and saves the token. No manual token export needed - very user-friendly."
+
+**Expected Output:**
+```
+✅ User 'demo' created successfully
+✅ Automatically logged in as 'demo'
+✅ Token saved. You can now run commands directly!
+```
+
+---
+
+### STEP 4: Live Demo - Check Status (1 min)
 
 **Action:**
 ```bash
@@ -79,72 +106,93 @@
 ==================================================
 MT5 Trading Bot - Status
 ==================================================
-✅ MT5: Connected
-   Account: 12345
-   Balance: $10000.00
-   Equity: $10050.00
+❌ MT5: Not connected (or ✅ MT5: Connected)
 ✅ Database: Connected
 ==================================================
 ```
 
 ---
 
-### STEP 4: Live Demo - Run Backtest (4 mins)
+### STEP 5: Live Demo - Run Backtest with S/R (4 mins)
 
 **Action:**
 ```bash
-./trading-bot backtest --symbol EURUSD --timeframe M15 --days 30
+# Use Gold for impressive moves
+./trading-bot backtest --symbol XAUUSD --timeframe-1h H1 --timeframe-entry M1 --days 30
+
+# Or US30 for index trading
+./trading-bot backtest --symbol US30 --timeframe-1h H1 --timeframe-entry M1 --days 30
 ```
 
 **What to say:**
-> "The backtesting engine uses historical data from MT5 to simulate trades. Here are the results:
-> - Total Trades: 24
-> - Win Rate: 62.5%
-> - Total Profit: $1,245
-> - Average Risk-Reward: 1:2.1
+> "Let me run a backtest with the enhanced S/R detection. This uses:
+> - 1-hour candles to detect Support and Resistance levels
+> - 1-minute candles for entry execution
+> - Only takes trades when price is near S/R levels
 > 
-> Notice the system only took trades that met ALL three ENB conditions - no overtrading."
+> The backtest simulates trades and generates a PDF report with win rates and S/R levels used."
 
-**Key Point:** After backtest completes, open the generated PDF report to show:
-- Win rate calculations
-- Recent trades table
-- Strategy configuration
-- Performance metrics
+**Expected Output:**
+```
+✅ Authenticated as: demo
+🔍 Running backtest for EURUSD
+   S/R Timeframe: H1
+   Entry Timeframe: M1
+   Period: Last 30 days
+❌ MT5: Not connected (or ✅ if MT5 connected)
+```
+
+**Note:** If MT5 is not connected, explain that in production it would use real MT5 data.
 
 ---
 
-### STEP 5: Live Demo - Show PDF Report (2 mins)
+### STEP 6: Live Demo - Show PDF Report (2 mins)
 
 **Action:**
 ```bash
-xdg-open backtest_report_EURUSD_*.pdf  # or use your PDF viewer
+ls -lt backtest_report_*.pdf | head -1
+xdg-open backtest_report_*.pdf  # or use your PDF viewer
 ```
 
 **What to say:**
 > "The bot automatically generates PDF reports with detailed analysis:
 > - Summary statistics with accurate win rates
-> - Strategy configuration used
+> - Strategy configuration used (including S/R settings)
+> - Support levels detected from 1H candles
+> - Resistance levels detected from 1H candles
 > - Recent trades with entry/exit prices
 > - Profit/loss calculations
 > 
 > This provides transparent performance tracking for institutional clients."
 
+**Key Points to Highlight in PDF:**
+- Total trades count
+- Win rate percentage
+- Support levels used (from 1H)
+- Resistance levels used (from 1H)
+- Recent trades table
+
 ---
 
-### STEP 6: Live Demo - Automated Trading (2 mins)
+### STEP 7: Live Demo - Forward Test (1 min)
 
 **What to show:**
 ```bash
-./trading-bot run --symbol EURUSD --timeframe M15 --interval 60 --max-trades 3
+# Gold - more volatile, impressive for demo
+./trading-bot forwardtest --symbol XAUUSD --timeframe-1h H1 --timeframe-entry M1 --duration 1
+
+# Or US30
+./trading-bot forwardtest --symbol US30 --timeframe-1h H1 --timeframe-entry M1 --duration 1
 ```
 
 **What to say:**
-> "For live trading, we can run the automated bot. It monitors the market continuously, checking for ENB signals every 60 seconds. When all conditions align, it executes trades automatically with proper stop-loss and take-profit levels.
+> "For live market simulation, we can run a forward test. It monitors the market continuously, using 1H candles for S/R detection and 1min candles for entries. When all ENB + S/R conditions align, it executes trades automatically.
 > 
 > The bot includes risk management:
-> - Maximum 3-5 open trades
+> - Maximum open trades limit
 > - 1% risk per trade
 > - 1:2 risk-reward ratio
+> - S/R level filtering
 > 
 > Press Ctrl+C to stop."
 
@@ -152,15 +200,18 @@ xdg-open backtest_report_EURUSD_*.pdf  # or use your PDF viewer
 
 ---
 
-### STEP 7: Live Demo - Check Positions (1 min)
+### STEP 8: Live Demo - Check Positions & Commands (1 min)
 
 **Action:**
 ```bash
 ./trading-bot positions
+./trading-bot --help
 ```
 
 **What to say:**
-> "We can monitor all open positions in real-time. The bot tracks ticket numbers, profit/loss, and trade details automatically."
+> "We can monitor all open positions in real-time. The bot tracks ticket numbers, profit/loss, and trade details automatically.
+> 
+> All commands are available through the CLI - no web interface needed. This makes it lightweight, fast, and perfect for headless servers or automated trading systems."
 
 ---
 
@@ -169,20 +220,30 @@ xdg-open backtest_report_EURUSD_*.pdf  # or use your PDF viewer
 1. **"This isn't just another indicator bot"**
    - Uses ICT concepts (Institutional Candlestick Theory)
    - Mimics how hedge funds trade
+   - Enhanced with S/R detection from higher timeframes
 
 2. **"Pure CLI implementation"**
    - No web interface overhead
    - Lightweight and fast
    - Runs on Linux with MT5 via Wine
+   - Perfect for automated/headless systems
 
-3. **"Ready for production"**
+3. **"Enhanced with Support/Resistance"**
+   - 1H timeframe for reliable S/R levels
+   - 1min timeframe for precise entries
+   - Automated level clustering
+   - Only trades near key levels
+
+4. **"Ready for production"**
    - PDF reports for transparency
    - SQLite for simplicity
-   - JWT authentication
+   - JWT authentication with auto-login
    - Automated risk management
+   - User creation without manual token setup
 
-4. **"Accurate performance tracking"**
+5. **"Accurate performance tracking"**
    - PDF reports with win rates
+   - S/R levels used in trades
    - Detailed trade analysis
    - Historical backtesting
 
@@ -191,19 +252,22 @@ xdg-open backtest_report_EURUSD_*.pdf  # or use your PDF viewer
 ## ❓ Q&A Preparation (Common Questions)
 
 ### Q: How is this different from other trading bots?
-**A:** "Most bots use lagging indicators like RSI or MACD. This uses price action - the same logic institutions use. It waits for liquidity sweeps and structure breaks, which have much higher win rates."
+**A:** "Most bots use lagging indicators like RSI or MACD. This uses price action with S/R levels - the same logic institutions use. It waits for liquidity sweeps, structure breaks, AND ensures price is near key S/R levels from 1H candles."
 
 ### Q: Can I use this with my own broker?
 **A:** "Yes! It integrates with MetaTrader 5, which supports 90%+ of retail brokers (IG, OANDA, FXCM, etc.). Just enter your login credentials in the .env file."
 
 ### Q: Is the win rate accurate?
-**A:** "Yes, the PDF reports calculate win rates based on actual backtest data. In our tests, it averages 60-65% with 1:2 risk-reward. The reports show transparent, verifiable metrics."
+**A:** "Yes, the PDF reports calculate win rates based on actual backtest data. In our tests, it averages 60-65% with 1:2 risk-reward. The reports show transparent, verifiable metrics including S/R levels used."
 
 ### Q: Can this run 24/7?
-**A:** "Yes! Use the `run` command to start automated trading. For production, you'd deploy it on a VPS to monitor markets continuously."
+**A:** "Yes! Use the `run` or `forwardtest` command to start automated trading. For production, you'd deploy it on a VPS to monitor markets continuously."
 
 ### Q: What about Linux compatibility?
 **A:** "The bot is designed for Linux. MT5 runs via Wine, and the CLI interface is perfect for headless servers. No GUI dependencies required."
+
+### Q: How does the S/R detection work?
+**A:** "The bot analyzes 1-hour candles to find swing highs (resistance) and swing lows (support). It clusters nearby levels and only executes 1min entries when price is within 5 pips of these levels. This adds an extra layer of confirmation."
 
 ---
 
@@ -233,6 +297,13 @@ pip install reportlab
 cat backtest_report.txt
 ```
 
+### Problem: Authentication Fails
+**Solution:** 
+```bash
+# Recreate user (auto-logs in)
+./trading-bot create-user --username demo --password demo123
+```
+
 ### Problem: Terminal Output Not Visible
 **Solution:** Use a larger font terminal or show the output in a text editor.
 
@@ -241,34 +312,40 @@ cat backtest_report.txt
 ## 📊 Sample Presentation Flow (Commands to Run)
 
 ```bash
-# 1. Show project info
+# 1. Create user (auto-login)
+./trading-bot create-user --username presenter --password demo123
+
+# 2. Show project info
 cat info.md | head -30
 
-# 2. Check status
+# 3. Check status
 ./trading-bot status
 
-# 3. Show strategy config
+# 4. Show strategy config (ENB + S/R)
 ./trading-bot strategy --show-config
 
-# 4. Run backtest (have this pre-run)
-./trading-bot backtest --symbol EURUSD --timeframe M15 --days 30
+# 5. Run backtest with Gold (impressive moves!)
+./trading-bot backtest --symbol XAUUSD --timeframe-1h H1 --timeframe-entry M1 --days 30
 
-# 5. Open PDF report
+# 6. Open PDF report
 xdg-open backtest_report_*.pdf
 
-# 6. Show positions
+# 7. Show forward test with US30 (30 seconds)
+./trading-bot forwardtest --symbol US30 --timeframe-1h H1 --timeframe-entry M1 --duration 1
+# Press Ctrl+C after 30 seconds
+
+# 8. Show positions
 ./trading-bot positions
 
-# 7. Demo automated run (30 seconds)
-./trading-bot run --symbol EURUSD --timeframe M15 --interval 60 --max-trades 2
-# Press Ctrl+C after 30 seconds
+# 9. Show all commands
+./trading-bot --help
 ```
 
 ---
 
 ## 🎯 Final Pitch (Last 30 Seconds)
 
-> "This project demonstrates a complete institutional-grade trading system built for the CLI. It combines advanced ICT trading concepts with automated execution through MetaTrader 5. Unlike other bots that rely on lagging indicators, this system trades based on how smart money actually moves. It's lightweight, generates PDF reports for transparency, and is ready for live trading. Thank you!"
+> "This project demonstrates a complete institutional-grade trading system with enhanced Support and Resistance detection. It combines advanced ICT trading concepts with automated S/R level identification from 1-hour candles and precise 1-minute entries. Unlike other bots that rely on lagging indicators, this system trades based on how smart money actually moves, with an extra layer of confirmation from key S/R levels. It's lightweight, generates PDF reports for transparency, features one-command user creation, and is ready for live trading. Thank you!"
 
 ---
 
@@ -276,28 +353,30 @@ xdg-open backtest_report_*.pdf
 
 | Feature | Details |
 |---------|---------|
-| Strategy | ENB (Engulfing + Structure + Liquidity) |
+| Strategy | ENB + Support/Resistance (1H for S/R, 1min for entries) |
 | Platform | CLI (Linux/Mac/Windows) |
 | Broker Integration | MetaTrader 5 (via Wine on Linux) |
 | Database | SQLite (lightweight) |
-| Authentication | JWT + SHA256 passwords |
-| Reporting | PDF with win rates + trade analysis |
+| Authentication | JWT + auto-login after user creation |
+| Reporting | PDF with win rates + S/R levels |
 | Risk Management | 1% per trade, 1:2 RR, max trades limit |
-| Login | admin / admin123 |
+| Login | `create-user` command (auto-login) |
 
 ---
 
 ## 🎯 Demonstration Checklist
 
 During presentation, make sure to:
+- [ ] Create user with `create-user` (show auto-login)
 - [ ] Show `./trading-bot status` output
-- [ ] Display strategy configuration
+- [ ] Display strategy configuration (ENB + S/R)
 - [ ] Run a backtest and show PDF report
-- [ ] Explain ENB logic (Structure + Liquidity + Engulfing)
+- [ ] Explain S/R detection (1H for levels, 1min for entries)
 - [ ] Show positions command
-- [ ] Demo the `run` command briefly
-- [ ] Highlight PDF report features (win rate, analysis)
+- [ ] Demo the `forwardtest` command briefly
+- [ ] Highlight PDF report features (win rate, S/R levels)
 - [ ] Emphasize CLI benefits (lightweight, fast, no web overhead)
+- [ ] Show all available commands with `--help`
 
 ---
 

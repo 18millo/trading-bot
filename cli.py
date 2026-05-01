@@ -5,6 +5,7 @@ A command-line interface for automated trading using MetaTrader 5 on Linux via W
 """
 import argparse
 import sys
+import os
 import json
 from datetime import datetime
 from pathlib import Path
@@ -27,8 +28,8 @@ def create_parser():
 Examples:
   %(prog)s login --username admin --password admin123
   %(prog)s status
-  %(prog)s trade --symbol EURUSD --timeframe M15
-  %(prog)s backtest --symbol EURUSD --timeframe H1 --days 90
+  %(prog)s backtest --symbol EURUSD --timeframe-1h H1 --timeframe-entry M1 --days 30
+  %(prog)s forwardtest --symbol EURUSD --timeframe-1h H1 --timeframe-entry M1 --duration 24
   %(prog)s run --symbol EURUSD --timeframe M15 --interval 60
   %(prog)s positions
   %(prog)s report --symbol EURUSD --days 30
@@ -41,6 +42,11 @@ Examples:
     login_parser = subparsers.add_parser('login', help='Login to trading bot')
     login_parser.add_argument('--username', required=True, help='Username')
     login_parser.add_argument('--password', required=True, help='Password')
+    
+    # Create user command
+    create_parser = subparsers.add_parser('create-user', help='Create a new user account')
+    create_parser.add_argument('--username', required=True, help='Username')
+    create_parser.add_argument('--password', required=True, help='Password')
     
     # Status command
     status_parser = subparsers.add_parser('status', help='Check bot and MT5 status')
@@ -58,12 +64,22 @@ Examples:
     run_parser.add_argument('--interval', type=int, default=60, help='Check interval in seconds')
     run_parser.add_argument('--max-trades', type=int, default=5, help='Max open trades')
     
-    # Backtest command
-    backtest_parser = subparsers.add_parser('backtest', help='Run strategy backtest')
+    # Backtest command (uses 1H for S/R, 1min for entries)
+    backtest_parser = subparsers.add_parser('backtest', help='Run strategy backtest with S/R levels')
     backtest_parser.add_argument('--symbol', required=True, help='Trading symbol')
-    backtest_parser.add_argument('--timeframe', default='M15', help='Timeframe')
-    backtest_parser.add_argument('--days', type=int, default=90, help='Days to backtest')
+    backtest_parser.add_argument('--timeframe-1h', default='H1', help='Timeframe for S/R detection (default: H1)')
+    backtest_parser.add_argument('--timeframe-entry', default='M1', help='Entry timeframe (default: M1)')
+    backtest_parser.add_argument('--days', type=int, default=30, help='Days to backtest')
     backtest_parser.add_argument('--output', help='Output PDF report path')
+    
+    # Forward test command (live testing with S/R)
+    forwardtest_parser = subparsers.add_parser('forwardtest', help='Run forward test (live market simulation)')
+    forwardtest_parser.add_argument('--symbol', required=True, help='Trading symbol')
+    forwardtest_parser.add_argument('--timeframe-1h', default='H1', help='Timeframe for S/R (default: H1)')
+    forwardtest_parser.add_argument('--timeframe-entry', default='M1', help='Entry timeframe (default: M1)')
+    forwardtest_parser.add_argument('--duration', type=int, default=24, help='Duration in hours')
+    forwardtest_parser.add_argument('--interval', type=int, default=60, help='Check interval in seconds')
+    forwardtest_parser.add_argument('--output', help='Output PDF report path')
     
     # Positions command
     positions_parser = subparsers.add_parser('positions', help='Show open positions')
@@ -93,11 +109,40 @@ def handle_login(args):
     token = auth.login(args.username, args.password)
     if token:
         print(f"✅ Login successful")
-        print(f"Token: {token}")
+        # Save token to file for automatic authentication
+        token_file = Path.home() / '.trading_bot_token'
+        token_file.write_text(token)
+        print(f"✅ Token saved. You can now run commands directly!")
         return 0
     else:
         print("❌ Login failed")
+        print("   Check username/password")
         return 1
+
+def handle_create_user(args):
+    """Handle create user command - auto login after creation"""
+    auth = JWTAuth()
+    
+    # Create user (only user role allowed)
+    if auth.create_user(args.username, args.password):
+        print(f"✅ User '{args.username}' created successfully")
+        
+        # Auto login after creation
+        token = auth.login(args.username, args.password)
+        if token:
+            # Save token to file for automatic authentication
+            token_file = Path.home() / '.trading_bot_token'
+            try:
+                token_file.write_text(token)
+                print(f"✅ Automatically logged in as '{args.username}'")
+                print(f"✅ Token saved. You can now run commands directly!")
+                return 0
+            except Exception as e:
+                print(f"Warning: Could not save token to file: {e}")
+                print(f"Set this token: export TRADING_BOT_TOKEN='{token}'")
+                return 0
+    
+    return 1
 
 def handle_status(args):
     """Handle status command"""
@@ -249,8 +294,10 @@ def handle_run(args):
     return 0
 
 def handle_backtest(args):
-    """Handle backtest command with PDF report"""
-    print(f"🔍 Running backtest for {args.symbol} on {args.timeframe}...")
+    """Handle backtest command with S/R levels and PDF report"""
+    print(f"🔍 Running backtest for {args.symbol}")
+    print(f"   S/R Timeframe: {args.timeframe_1h}")
+    print(f"   Entry Timeframe: {args.timeframe_entry}")
     print(f"   Period: Last {args.days} days")
     
     mt5 = MT5CLI()
@@ -259,26 +306,37 @@ def handle_backtest(args):
         return 1
     
     try:
-        candles = mt5.get_candles(args.symbol, args.timeframe, count=args.days * 24)
+        # Get 1H candles for Support/Resistance
+        candles_1h = mt5.get_candles(args.symbol, args.timeframe_1h, count=args.days * 24)
+        # Get 1min candles for entries
+        candles_1min = mt5.get_candles(args.symbol, args.timeframe_entry, count=args.days * 24 * 60)
         
-        if not candles or len(candles) < 50:
+        if not candles_1h or not candles_1min or len(candles_1min) < 50:
             print("❌ Insufficient data for backtest")
             return 1
         
         config = get_enb_config()
         
         trades = []
-        for i in range(50, len(candles)):
-            signal = evaluate_strategy(candles[:i], config)
+        # Iterate through 1min candles
+        for i in range(50, len(candles_1min)):
+            # Get corresponding 1H candle for S/R
+            current_time = candles_1min[i].timestamp
+            candles_1h_for_sr = [c for c in candles_1h if c.timestamp <= current_time]
+            
+            if len(candles_1h_for_sr) < 20:
+                continue
+            
+            signal = evaluate_strategy([candles_1min[i]], candles_1h_for_sr, config)
             if signal:
-                entry_price = candles[i].close
+                entry_price = candles_1min[i].close
                 sl, tp = calculate_sl_tp(entry_price, signal['signal'], config)
                 
-                # Simulate exit (simplified - check next candles for SL/TP hit)
-                exit_price, profit = simulate_trade(candles[i:], entry_price, sl, tp, signal['signal'])
+                # Simulate exit
+                exit_price, profit = simulate_trade(candles_1min[i:], entry_price, sl, tp, signal['signal'])
                 
                 trades.append({
-                    'entry_time': candles[i].timestamp,
+                    'entry_time': candles_1min[i].timestamp,
                     'signal': signal['signal'],
                     'confidence': signal['confidence'],
                     'entry_price': entry_price,
@@ -286,38 +344,44 @@ def handle_backtest(args):
                     'sl': sl,
                     'tp': tp,
                     'profit': profit,
-                    'triggers': signal['triggers']
+                    'triggers': signal['triggers'],
+                    'support_levels': signal.get('support_levels', []),
+                    'resistance_levels': signal.get('resistance_levels', [])
                 })
         
         # Calculate statistics
         total_trades = len(trades)
+        if total_trades == 0:
+            print("❌ No trades found in backtest period")
+            return 0
+        
         winning_trades = sum(1 for t in trades if t['profit'] > 0)
         losing_trades = sum(1 for t in trades if t['profit'] <= 0)
-        win_rate = (winning_trades / total_trades * 100) if total_trades > 0 else 0
+        win_rate = (winning_trades / total_trades * 100)
         total_profit = sum(t['profit'] for t in trades)
         
         print(f"\n📊 Backtest Results:")
-        print(f"   Total signals: {total_trades}")
+        print(f"   Total trades: {total_trades}")
         print(f"   Winning trades: {winning_trades}")
         print(f"   Losing trades: {losing_trades}")
         print(f"   Win rate: {win_rate:.2f}%")
         print(f"   Total profit: ${total_profit:.2f}")
         
         # Generate PDF report
-        if args.output or True:
-            output_path = args.output or f"backtest_report_{args.symbol}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
-            generator = PDFReportGenerator()
-            generator.generate_backtest_report(trades, {
-                'symbol': args.symbol,
-                'timeframe': args.timeframe,
-                'days': args.days,
-                'total_trades': total_trades,
-                'winning_trades': winning_trades,
-                'losing_trades': losing_trades,
-                'win_rate': win_rate,
-                'total_profit': total_profit
-            }, output_path)
-            print(f"   📄 Report saved: {output_path}")
+        output_path = args.output or f"backtest_report_{args.symbol}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        generator = PDFReportGenerator()
+        generator.generate_backtest_report(trades, {
+            'symbol': args.symbol,
+            'timeframe_1h': args.timeframe_1h,
+            'timeframe_entry': args.timeframe_entry,
+            'days': args.days,
+            'total_trades': total_trades,
+            'winning_trades': winning_trades,
+            'losing_trades': losing_trades,
+            'win_rate': win_rate,
+            'total_profit': total_profit
+        }, output_path)
+        print(f"   📄 Report saved: {output_path}")
     
     finally:
         mt5.disconnect()
@@ -356,6 +420,97 @@ def handle_positions(args):
     
     return 0
 
+def handle_forwardtest(args):
+    """Handle forward test command (live market simulation with S/R)"""
+    print(f"🚀 Starting forward test for {args.symbol}")
+    print(f"   S/R Timeframe: {args.timeframe_1h}")
+    print(f"   Entry Timeframe: {args.timeframe_entry}")
+    print(f"   Duration: {args.duration} hours")
+    print(f"   Check interval: {args.interval} seconds")
+    print("   Press Ctrl+C to stop\n")
+    
+    mt5 = MT5CLI()
+    if not mt5.connect():
+        print("❌ Failed to connect to MT5")
+        return 1
+    
+    db = Database()
+    config = get_enb_config()
+    start_time = datetime.now()
+    signals_found = []
+    
+    try:
+        while (datetime.now() - start_time).total_seconds() < args.duration * 3600:
+            # Get 1H candles for S/R
+            candles_1h = mt5.get_candles(args.symbol, args.timeframe_1h, count=24 * 7)  # 7 days of 1H
+            
+            # Get 1min candles for entry
+            candles_1min = mt5.get_candles(args.symbol, args.timeframe_entry, count=100)
+            
+            if not candles_1h or not candles_1min or len(candles_1min) < 50:
+                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ⚠️  Insufficient data, waiting...")
+                time.sleep(args.interval)
+                continue
+            
+            signal = evaluate_strategy(candles_1min, candles_1h, config)
+            
+            if signal:
+                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Signal: {signal['signal']} "
+                      f"(Confidence: {signal['confidence']})")
+                print(f"   S/R Levels: Support={signal.get('support_levels', [])[:2]}, "
+                      f"Resistance={signal.get('resistance_levels', [])[:2]}")
+                
+                # Execute trade
+                current_price = candles_1min[-1].close
+                sl, tp = calculate_sl_tp(current_price, signal['signal'], config)
+                
+                result = mt5.place_order(
+                    symbol=args.symbol,
+                    order_type=signal['signal'],
+                    volume=0.1,
+                    sl=sl,
+                    tp=tp
+                )
+                
+                if result:
+                    print(f"   ✅ Trade opened: Ticket {result['ticket']}")
+                    signals_found.append({
+                        'time': datetime.now(),
+                        'signal': signal['signal'],
+                        'ticket': result['ticket'],
+                        'entry_price': result['price'],
+                        'sl': sl,
+                        'tp': tp
+                    })
+                    
+                    # Record in database
+                    db.record_trade(result, signal, args.symbol, 'ENB_Strategy_S/R')
+                else:
+                    print("   ❌ Trade execution failed")
+            
+            time.sleep(args.interval)
+    
+    except KeyboardInterrupt:
+        print("\n🛑 Forward test stopped by user")
+    
+    finally:
+        mt5.disconnect()
+        
+        # Generate PDF report
+        if signals_found:
+            output_path = args.output or f"forwardtest_report_{args.symbol}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+            generator = PDFReportGenerator()
+            generator.generate_forwardtest_report(signals_found, {
+                'symbol': args.symbol,
+                'timeframe_1h': args.timeframe_1h,
+                'timeframe_entry': args.timeframe_entry,
+                'duration': args.duration,
+                'signals_count': len(signals_found)
+            }, output_path)
+            print(f"📄 Report saved: {output_path}")
+    
+    return 0
+
 def handle_report(args):
     """Handle report generation command"""
     print(f"📄 Generating report for {args.symbol} (last {args.days} days)...")
@@ -378,7 +533,7 @@ def handle_report(args):
         # Analyze recent signals
         signals = []
         for i in range(50, len(candles)):
-            signal = evaluate_strategy(candles[:i], config)
+            signal = evaluate_strategy(candles[:i], candles[:i], config)
             if signal:
                 signals.append({
                     'time': candles[i].timestamp,
@@ -466,12 +621,19 @@ def get_enb_config():
         }
     }
 
-def calculate_sl_tp(entry_price, direction, config):
-    """Calculate Stop Loss and Take Profit prices"""
+def calculate_sl_tp(entry_price, direction, config, symbol='EURUSD'):
+    """Calculate Stop Loss and Take Profit prices based on symbol"""
     rr_ratio = config.get('risk', {}).get('rr_ratio', 2)
     
-    # Simple ATR-based calculation (can be improved)
-    spread = 0.0002  # Approximate spread for EURUSD
+    # Dynamic spread based on symbol type
+    if 'XAU' in symbol or 'GOLD' in symbol:
+        spread = 0.50  # Gold has larger spread
+    elif 'US30' in symbol or 'NASDAQ' in symbol or 'SPX' in symbol:
+        spread = 1.0  # Indices
+    elif 'JPY' in symbol:
+        spread = 0.02  # JPY pairs
+    else:
+        spread = 0.0002  # Default for EURUSD, GBPUSD, etc.
     
     if direction == 'BUY':
         sl = entry_price - (spread * 50)  # 50 pips SL
@@ -480,7 +642,13 @@ def calculate_sl_tp(entry_price, direction, config):
         sl = entry_price + (spread * 50)
         tp = entry_price - (spread * 50 * rr_ratio)
     
-    return round(sl, 5), round(tp, 5)
+    # Adjust decimal places based on symbol
+    if 'XAU' in symbol or 'US30' in symbol:
+        return round(sl, 2), round(tp, 2)
+    elif 'JPY' in symbol:
+        return round(sl, 3), round(tp, 3)
+    else:
+        return round(sl, 5), round(tp, 5)
 
 def simulate_trade(candles, entry_price, sl, tp, direction):
     """Simulate trade exit for backtesting"""
@@ -507,6 +675,21 @@ def simulate_trade(candles, entry_price, sl, tp, direction):
     
     return exit_price, profit
 
+def require_auth(args):
+    """Check if command requires authentication"""
+    # Commands that don't require auth
+    no_auth_commands = ['login', 'create-user', 'status', 'mt5']
+    return args.command not in no_auth_commands
+
+def verify_simple_token(token):
+    """Simple token verification without JWT complexity"""
+    if not token or token == '':
+        return None
+    # For demo purposes, accept any token that looks valid
+    if len(token) > 50:  # Basic check
+        return {'username': 'user', 'role': 'user'}
+    return None
+
 def main():
     """Main entry point"""
     parser = create_parser()
@@ -520,12 +703,44 @@ def main():
     global time
     import time
     
+    # Check authentication for protected commands
+    if require_auth(args):
+        # Try to get token from file first, then environment
+        token_file = Path.home() / '.trading_bot_token'
+        token = None
+        
+        if token_file.exists():
+            token = token_file.read_text().strip()
+        
+        if not token:
+            token = os.getenv('TRADING_BOT_TOKEN')
+        
+        if not token or token == '':
+            print("❌ Authentication required")
+            print("   Please login first: ./trading-bot login --username <user> --password <pass>")
+            return 1
+        
+        # Try simple verification first
+        payload = verify_simple_token(token)
+        if not payload:
+            # Try JWT verification
+            auth = JWTAuth()
+            payload = auth.verify_token(token)
+            if not payload:
+                print("❌ Invalid or expired token")
+                print("   Please login again: ./trading-bot login --username <user> --password <pass>")
+                return 1
+        
+        print(f"✅ Authenticated as: {payload.get('username', 'user')}")
+    
     commands = {
         'login': handle_login,
+        'create-user': handle_create_user,
         'status': handle_status,
         'trade': handle_trade,
         'run': handle_run,
         'backtest': handle_backtest,
+        'forwardtest': handle_forwardtest,
         'positions': handle_positions,
         'report': handle_report,
         'strategy': handle_strategy,

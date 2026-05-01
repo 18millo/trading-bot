@@ -66,15 +66,26 @@ class JWTAuth:
         if jwt is None:
             return None
         try:
-            payload = jwt.decode(token, self.secret_key, algorithms=[self.algorithm])
+            # Try with python-jose first
+            from jose import jwt as jose_jwt
+            payload = jose_jwt.decode(token, self.secret_key, algorithms=[self.algorithm])
             return payload
-        except jwt.ExpiredSignatureError:
-            return None
-        except jwt.InvalidTokenError:
+        except ImportError:
+            try:
+                # Fall back to PyJWT
+                payload = jwt.decode(token, self.secret_key, algorithms=[self.algorithm])
+                return payload
+            except Exception:
+                return None
+        except Exception:
             return None
     
     def create_user(self, username: str, password: str, role: str = 'user') -> bool:
-        """Create a new user"""
+        """Create a new user (no admin role - users only)"""
+        if role not in ['user']:
+            print("❌ Only 'user' role allowed")
+            return False
+        
         conn = self.db.get_connection()
         cur = conn.cursor()
         
@@ -83,9 +94,10 @@ class JWTAuth:
         try:
             cur.execute(
                 "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
-                (username, password_hash, role)
+                (username, password_hash, 'user')
             )
             conn.commit()
+            print(f"✅ User '{username}' created successfully")
             return True
         except Exception as e:
             print(f"Error creating user: {e}")
